@@ -1,9 +1,10 @@
 # odoo-print-agent
 
-## What it does
+## Overview
 
-This is the local agent for **LL Print Platform**:
+This is the local agent for **LL Print Platform** (Odoo addon). It runs on a machine that has access to printers and connects to Odoo using an API key.
 
+Current architecture (today):
 - Syncs printers to Odoo (`/api/print/printers/sync`)
 - Polls jobs from Odoo (`/api/print/jobs`)
 - Marks jobs ack/done/fail (`/api/print/job/<id>/*`)
@@ -11,6 +12,37 @@ This is the local agent for **LL Print Platform**:
   - OS printer queue (macOS/Linux via CUPS `lp`)
   - Raw TCP printing (LAN printers on port 9100, for raw/ESC-POS jobs)
   - Spool-to-file fallback (writes payloads to disk)
+
+## Install (End Users)
+
+Recommended: use the packaged installers for your OS (from releases).
+
+If you are building/distributing yourself, this repo includes installer templates:
+
+### Windows
+
+- Inno Setup script: `installer/windows/print-agent.iss`
+- Installs as either:
+  - Windows Service (NSSM), recommended
+  - or “Run on login” (registry entry)
+- Installer config path: `C:\ProgramData\OdooPrintAgent\config.json`
+
+### macOS
+
+- Installer script: `installer/macos/install.sh`
+- Installs:
+  - Binary: `/Applications/OdooPrintAgent/odoo-print-agent`
+  - Config: `/Library/Application Support/OdooPrintAgent/config.json`
+  - Logs: `/Library/Logs/OdooPrintAgent/agent.log`
+  - LaunchDaemon (auto-start on boot): `/Library/LaunchDaemons/com.odoo.printagent.plist`
+
+### Linux
+
+- Installer script: `installer/linux/install.sh`
+- Installs:
+  - Binary: `/opt/odoo-print-agent/odoo-print-agent`
+  - Config: `/etc/odoo-print-agent/config.json`
+  - systemd unit (auto-start on boot): `/etc/systemd/system/odoo-print-agent.service`
 
 ## Configure
 
@@ -21,7 +53,7 @@ Default config path:
 
 If a `./config.json` file exists in the current directory, the agent uses it by default (useful for development).
 
-Edit the config file:
+Edit the config file directly:
 - `odoo_url`: base URL of your Odoo (must be reachable from the agent machine)
 - `api_key`: API key from **Printing → Configuration → Printing Setup**
 - `printers`: list of printers this agent exposes to Odoo
@@ -30,6 +62,12 @@ Or use the CLI:
 
 ```bash
 go run . configure --odoo-url https://YOUR-ODOO-URL --api-key YOUR_API_KEY
+```
+
+Or use the local setup UI (writes `config.json` for you):
+
+```bash
+go run . ui
 ```
 
 ## Doctor
@@ -54,6 +92,11 @@ Odoo printers are created/updated from `printers[].agent_identifier`. To actuall
 
 - `os_printer_name` (macOS/Linux): prints through CUPS (`lp -d <name>`)
 - `network_host` + optional `network_port` (default 9100): raw TCP printing (raw/escpos jobs only)
+
+Notes:
+- Windows uses `os_printer_name` as the Windows printer name:
+  - PDF jobs print silently via SumatraPDF (installed/bundled by the Windows installer).
+- If you set neither `os_printer_name` nor `network_host`, the agent will spool the job payload to disk (`spool_dir`) instead of printing.
 
 Example:
 
@@ -102,3 +145,11 @@ go run . run --once
 ```bash
 ./scripts/build.sh
 ```
+
+## Roadmap (Production Installer Wizard)
+
+Target end-user experience:
+- Installer wizard selects printers during setup (no JSON editing)
+- Agent runs as a background service on boot (Windows service, LaunchDaemon, systemd)
+- Silent PDF printing on Windows (SumatraPDF) and macOS/Linux (lp)
+- Optional “direct /print HTTP service” mode for immediate printing (instead of polling)

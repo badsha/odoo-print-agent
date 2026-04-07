@@ -1,28 +1,12 @@
 {
-  "odoo_url": "http://127.0.0.1:8069",
-  "api_key": "Sd70i5zN__GYyNUTr-G_HiftmAxhL-eqMp3WDnKRZJI",
-  "poll_interval_seconds": 3,
+  "odoo_url": "https://your-odoo.example.com",
+  "api_key": "",
+  "poll_interval_seconds": 5,
   "lease_seconds": 30,
   "limit": 20,
-  "spool_dir": "/Users/mohammadhamid/projects/odoo-dev/odoo-print-agent/spool",
-  "printers": [
-    {
-      "agent_identifier": "brother_hl_l2320d",
-      "name": "Brother HL-L2320D",
-      "printer_type": "report",
-      "code": "BHL2320D",
-      "os_printer_name": "Brother_HL_L2320D_series",
-      "network_host": "",
-      "network_port": 0
-    },
-    {
-      "agent_identifier": "brother_mfc_b7810dw",
-      "name": "Brother MFC-B7810DW",
-      "printer_type": "report",
-      "code": "BMFC7810DW",
-      "os_printer_name": "Brother_MFC_B7810DW",
-      "network_host": "",
-      "network_port": 0
-    }
-  ]
+  "spool_dir": "./spool",
+  "sumatra_pdf_path": "",
+  "log_file": "",
+  "log_level": "info",
+  "printers": []
 }

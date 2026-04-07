@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,12 +18,13 @@ import (
 )
 
 type uiPageData struct {
-	ConfigPath  string
-	Addr        string
-	Config      *Config
-	OSPrinters  []string
-	Message     string
-	DoctorLines []string
+	ConfigPath         string
+	Addr               string
+	Config             *Config
+	OSPrinters         []string
+	SelectedOSPrinters map[string]bool
+	Message            string
+	DoctorLines        []string
 }
 
 func uiCmd(args []string) {
@@ -35,6 +35,9 @@ func uiCmd(args []string) {
 	_ = fs.Parse(args)
 
 	absPath := resolveConfigPath(*configPath)
+	if cfg, err := LoadConfig(absPath); err == nil {
+		initLogging(cfg)
+	}
 
 	tmpl := template.Must(template.New("page").Parse(uiHTML))
 
@@ -47,15 +50,66 @@ func uiCmd(args []string) {
 			return
 		}
 		osPrinters, _ := ListOSPrinters()
+		selectedOS := make(map[string]bool, len(cfg.Printers)*2)
+		for _, p := range cfg.Printers {
+			if strings.TrimSpace(p.OSPrinterName) != "" {
+				selectedOS[strings.TrimSpace(p.OSPrinterName)] = true
+			}
+			if strings.TrimSpace(p.Name) != "" {
+				selectedOS[strings.TrimSpace(p.Name)] = true
+			}
+		}
 		data := uiPageData{
-			ConfigPath: absPath,
-			Addr:       *addr,
-			Config:     cfg,
-			OSPrinters: osPrinters,
-			Message:    strings.TrimSpace(r.URL.Query().Get("msg")),
+			ConfigPath:         absPath,
+			Addr:               *addr,
+			Config:             cfg,
+			OSPrinters:         osPrinters,
+			SelectedOSPrinters: selectedOS,
+			Message:            strings.TrimSpace(r.URL.Query().Get("msg")),
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = tmpl.Execute(w, data)
+	})
+
+	mux.HandleFunc("/import", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		cfg, err := LoadConfig(absPath)
+		if err != nil {
+			http.Error(w, "load config: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "parse form: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		selected := r.Form["os_printer"]
+		var cleaned []string
+		seen := make(map[string]struct{}, len(selected))
+		for _, p := range selected {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			seen[p] = struct{}{}
+			cleaned = append(cleaned, p)
+		}
+		if len(cleaned) == 0 {
+			http.Redirect(w, r, "/?msg="+url.QueryEscape("No OS printers selected."), http.StatusSeeOther)
+			return
+		}
+		sort.Strings(cleaned)
+		cfg.Printers = buildPrinterConfigs(cleaned)
+		if err := cfg.Save(absPath); err != nil {
+			http.Error(w, "save config: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/?msg="+url.QueryEscape(fmt.Sprintf("Imported %d printers from OS detection.", len(cfg.Printers))), http.StatusSeeOther)
 	})
 
 	mux.HandleFunc("/save", func(w http.ResponseWriter, r *http.Request) {
@@ -130,8 +184,8 @@ func uiCmd(args []string) {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	log.Printf("ui: config=%s addr=http://%s", absPath, *addr)
-	log.Fatal(srv.ListenAndServe())
+	logInfo("ui_listen", "", map[string]any{"config": absPath, "addr": "http://" + *addr})
+	logFatalf("%v", srv.ListenAndServe())
 }
 
 func parseInt(v string, def int) int {
@@ -258,10 +312,11 @@ const uiHTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Odoo Print Agent Setup</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+    :root { color-scheme: light; }
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; background: #fff; color: #111; }
     h1 { font-size: 20px; margin: 0 0 16px; }
     .muted { color: #666; }
-    .box { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .box { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 12px 0; background: #fff; }
     label { display: block; font-size: 12px; margin-bottom: 4px; color: #333; }
     input[type=text], input[type=password], input[type=number] { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; }
     select { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; background: white; }
@@ -275,6 +330,10 @@ const uiHTML = `<!doctype html>
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
     th { font-size: 12px; color: #666; }
     .small { font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .check { display: flex; gap: 10px; align-items: center; padding: 6px 8px; border: 1px solid #eee; border-radius: 8px; background: #fafafa; }
+    .check span { color: #111; font-size: 13px; }
+    input[type=checkbox] { width: 16px; height: 16px; }
   </style>
 </head>
 <body>
@@ -284,6 +343,30 @@ const uiHTML = `<!doctype html>
   {{if .Message}}
     <div class="box msg">{{.Message}}</div>
   {{end}}
+
+  <form method="post" action="/import">
+    <div class="box">
+      <div style="display:flex; gap:10px; align-items:center; justify-content:space-between;">
+        <div>
+          <div style="font-weight:600;">Detected OS Printers</div>
+          <div class="muted small">Select printers to expose to Odoo. This replaces the configured printers list.</div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <a class="btn secondary" href="/">Refresh</a>
+          <button class="btn" type="submit">Import Selected</button>
+        </div>
+      </div>
+      {{if .OSPrinters}}
+        <div class="grid">
+          {{range .OSPrinters}}
+            <label class="check"><input type="checkbox" name="os_printer" value="{{.}}" {{if index $.SelectedOSPrinters .}}checked{{end}} /> <span class="small">{{.}}</span></label>
+          {{end}}
+        </div>
+      {{else}}
+        <div class="muted small" style="margin-top:10px;">No OS printers detected.</div>
+      {{end}}
+    </div>
+  </form>
 
   <form method="post" action="/save">
     <div class="box">
@@ -361,6 +444,9 @@ const uiHTML = `<!doctype html>
           {{end}}
         </tbody>
       </table>
+      {{if not .Config.Printers}}
+        <div class="muted small" style="margin-top:10px;">No printers configured. Use “Detected OS Printers” above to import.</div>
+      {{end}}
 
       <datalist id="os_printers">
         {{range .OSPrinters}}

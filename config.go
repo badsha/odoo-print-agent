@@ -16,6 +16,9 @@ type Config struct {
 	LeaseSeconds        int             `json:"lease_seconds"`
 	Limit               int             `json:"limit"`
 	SpoolDir            string          `json:"spool_dir"`
+	SumatraPDFPath      string          `json:"sumatra_pdf_path"`
+	LogFile             string          `json:"log_file"`
+	LogLevel            string          `json:"log_level"`
 	Printers            []PrinterConfig `json:"printers"`
 }
 
@@ -74,6 +77,9 @@ func LoadConfig(path string) (*Config, error) {
 func (c *Config) Normalize(baseDir string) error {
 	c.OdooURL = strings.TrimSpace(c.OdooURL)
 	c.APIKey = strings.TrimSpace(c.APIKey)
+	c.SumatraPDFPath = strings.TrimSpace(c.SumatraPDFPath)
+	c.LogFile = strings.TrimSpace(c.LogFile)
+	c.LogLevel = strings.TrimSpace(c.LogLevel)
 	if c.PollIntervalSeconds <= 0 {
 		c.PollIntervalSeconds = 3
 	}
@@ -88,6 +94,12 @@ func (c *Config) Normalize(baseDir string) error {
 	}
 	if !filepath.IsAbs(c.SpoolDir) {
 		c.SpoolDir = filepath.Join(baseDir, c.SpoolDir)
+	}
+	if c.LogLevel == "" {
+		c.LogLevel = "info"
+	}
+	if c.LogFile != "" && !filepath.IsAbs(c.LogFile) {
+		c.LogFile = filepath.Join(baseDir, c.LogFile)
 	}
 	for i := range c.Printers {
 		c.Printers[i].AgentIdentifier = strings.TrimSpace(c.Printers[i].AgentIdentifier)

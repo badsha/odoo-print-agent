@@ -1,0 +1,6 @@
+dist/
+spool/
+*.log
+*.jsonl
+.DS_Store
+.idea/

@@ -40,6 +40,10 @@ func main() {
 		printersCmd(args)
 	case "ui":
 		uiCmd(args)
+	case "setup":
+		setupCmd(args)
+	case "test-print":
+		testPrintCmd(args)
 	case "version":
 		fmt.Printf("odoo-print-agent %s\n", versionString())
 	default:
@@ -68,14 +72,15 @@ func runCmd(args []string) {
 	absPath := resolveConfigPath(*configPath)
 	cfg, err := LoadConfig(absPath)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		logFatalf("load config: %v", err)
 	}
+	initLogging(cfg)
 
 	if strings.TrimSpace(cfg.OdooURL) == "" {
-		log.Fatalf("missing odoo_url in config: %s", absPath)
+		logFatalf("missing odoo_url in config: %s", absPath)
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		log.Fatalf("missing api_key in config: %s", absPath)
+		logFatalf("missing api_key in config: %s", absPath)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -83,11 +88,12 @@ func runCmd(args []string) {
 	registerSignals(cancel)
 
 	client := NewAPIClient(cfg.OdooURL, cfg.APIKey)
-	backend := NewRoutingBackend(cfg.SpoolDir)
+	backend := NewRoutingBackend(cfg)
+	cleanupStartup(cfg)
 
 	if *once {
 		if err := RunOnce(ctx, cfg, client, backend); err != nil {
-			log.Fatalf("run once: %v", err)
+			logFatalf("run once: %v", err)
 		}
 		return
 	}
@@ -98,7 +104,7 @@ func runCmd(args []string) {
 	for {
 		start := time.Now()
 		if err := RunOnce(ctx, cfg, client, backend); err != nil {
-			log.Printf("cycle error: %v", err)
+			logError("cycle_error", err.Error(), nil)
 		}
 		elapsed := time.Since(start)
 		select {
@@ -124,8 +130,9 @@ func configureCmd(args []string) {
 	absPath := resolveConfigPath(*configPath)
 	cfg, err := LoadConfig(absPath)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		logFatalf("load config: %v", err)
 	}
+	initLogging(cfg)
 	if strings.TrimSpace(*odooURL) != "" {
 		cfg.OdooURL = strings.TrimSpace(*odooURL)
 	} else if strings.TrimSpace(*odooURLAlt) != "" {
@@ -135,10 +142,10 @@ func configureCmd(args []string) {
 		cfg.APIKey = strings.TrimSpace(*apiKey)
 	}
 	if strings.TrimSpace(cfg.OdooURL) == "" {
-		log.Fatalf("missing odoo_url")
+		logFatalf("missing odoo_url")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		log.Fatalf("missing api_key")
+		logFatalf("missing api_key")
 	}
 
 	if !*skipValidate {
@@ -146,11 +153,11 @@ func configureCmd(args []string) {
 		defer cancel()
 		client := NewAPIClient(cfg.OdooURL, cfg.APIKey)
 		if _, err := client.GetJobs(ctx, 5, 1); err != nil {
-			log.Fatalf("validate failed: %v", err)
+			logFatalf("validate failed: %v", err)
 		}
 	}
 	if err := cfg.Save(absPath); err != nil {
-		log.Fatalf("save config: %v", err)
+		logFatalf("save config: %v", err)
 	}
 	fmt.Printf("saved %s\n", absPath)
 }
@@ -171,7 +178,7 @@ func resolveConfigPath(path string) string {
 	}
 	absPath, err := filepath.Abs(p)
 	if err != nil {
-		log.Fatalf("invalid config path: %v", err)
+		logFatalf("invalid config path: %v", err)
 	}
 	return absPath
 }
@@ -182,7 +189,7 @@ func printersCmd(args []string) {
 
 	printers, err := ListOSPrinters()
 	if err != nil {
-		log.Fatalf("list printers: %v", err)
+		logFatalf("list printers: %v", err)
 	}
 	for _, p := range printers {
 		fmt.Println(p)
@@ -199,11 +206,11 @@ func registerSignals(cancel func()) {
 }
 
 func RunOnce(ctx context.Context, cfg *Config, client *APIClient, backend PrintBackend) error {
-	log.Printf("sync printers: %d configured", len(cfg.Printers))
+	logInfo("sync_printers_start", "", map[string]any{"configured": len(cfg.Printers)})
 	if err := client.SyncPrinters(ctx, cfg.Printers); err != nil {
 		return fmt.Errorf("sync printers: %w", err)
 	}
-	log.Printf("sync printers: ok")
+	logInfo("sync_printers_ok", "", nil)
 
 	jobs, err := client.GetJobs(ctx, cfg.LeaseSeconds, cfg.Limit)
 	if err != nil {
@@ -226,7 +233,7 @@ func RunOnce(ctx context.Context, cfg *Config, client *APIClient, backend PrintB
 		}
 
 		if err := handleJob(ctx, client, backend, printerByID, j); err != nil {
-			log.Printf("job %d error: %v", j.ID, err)
+			logError("job_error", err.Error(), map[string]any{"job_id": j.ID})
 		}
 	}
 	return nil

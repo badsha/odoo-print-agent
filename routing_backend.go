@@ -7,16 +7,18 @@ import (
 )
 
 type RoutingBackend struct {
-	cups  *CUPSBackend
-	raw   *RawTCPBackend
-	spool *SpoolBackend
+	cups   *CUPSBackend
+	raw    *RawTCPBackend
+	spool  *SpoolBackend
+	winPDF *WindowsPDFBackend
 }
 
-func NewRoutingBackend(spoolDir string) *RoutingBackend {
+func NewRoutingBackend(cfg *Config) *RoutingBackend {
 	return &RoutingBackend{
-		cups:  &CUPSBackend{},
-		raw:   &RawTCPBackend{},
-		spool: NewSpoolBackend(spoolDir),
+		cups:   &CUPSBackend{},
+		raw:    &RawTCPBackend{},
+		spool:  NewSpoolBackend(cfg.SpoolDir),
+		winPDF: NewWindowsPDFBackend(cfg.SumatraPDFPath),
 	}
 }
 
@@ -28,6 +30,9 @@ func (b *RoutingBackend) Print(ctx context.Context, printer PrinterConfig, job J
 		return b.raw.Print(ctx, printer, job, payload)
 	}
 	if strings.TrimSpace(printer.OSPrinterName) != "" {
+		if b.winPDF != nil && strings.ToLower(strings.TrimSpace(job.JobType)) == "pdf" {
+			return b.winPDF.Print(ctx, printer, job, payload)
+		}
 		return b.cups.Print(ctx, printer, job, payload)
 	}
 	return b.spool.Print(ctx, printer, job, payload)

@@ -15,4 +15,5 @@ mkdir -p dist/darwin dist/linux dist/windows
 GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/darwin/odoo-print-agent .
 GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/darwin/odoo-print-agent-arm64 .
 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/linux/odoo-print-agent .
+GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/linux/odoo-print-agent-arm64 .
 GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/windows/odoo-print-agent.exe .

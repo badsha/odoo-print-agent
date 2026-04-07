@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CFG_DIR="/Library/Application Support/OdooPrintAgent"
+LOG_DIR="/Library/Logs/OdooPrintAgent"
+PLIST="/Library/LaunchDaemons/com.odoo.printagent.plist"
+DEFAULT_CFG="/Applications/OdooPrintAgent/config.default.json"
+
+mkdir -p "$CFG_DIR" "$LOG_DIR"
+chmod 700 "$CFG_DIR" || true
+chmod 755 "$LOG_DIR" || true
+
+if [[ ! -f "$CFG_DIR/config.json" ]] && [[ -f "$DEFAULT_CFG" ]]; then
+  install -m 0600 "$DEFAULT_CFG" "$CFG_DIR/config.json"
+fi
+
+if [[ -f "$CFG_DIR/config.json" ]]; then
+  chmod 600 "$CFG_DIR/config.json" || true
+fi
+
+launchctl unload "$PLIST" >/dev/null 2>&1 || true
+launchctl load "$PLIST"
+
+exit 0

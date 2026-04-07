@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,8 +27,9 @@ func doctorCmd(args []string) {
 	absPath := resolveConfigPath(*configPath)
 	cfg, err := LoadConfig(absPath)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		logFatalf("load config: %v", err)
 	}
+	initLogging(cfg)
 
 	fmt.Println("config:", absPath)
 	fmt.Println("odoo_url:", strings.TrimSpace(cfg.OdooURL))
@@ -39,7 +39,7 @@ func doctorCmd(args []string) {
 
 	baseURL, err := url.Parse(strings.TrimRight(strings.TrimSpace(cfg.OdooURL), "/"))
 	if err != nil || strings.TrimSpace(baseURL.Scheme) == "" || strings.TrimSpace(baseURL.Host) == "" {
-		log.Fatalf("invalid odoo_url: %q", cfg.OdooURL)
+		logFatalf("invalid odoo_url: %q", cfg.OdooURL)
 	}
 
 	httpClient := &http.Client{Timeout: *timeout}
