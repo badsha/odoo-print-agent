@@ -1,0 +1,13 @@
+[Unit]
+Description=Odoo Print Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/odoo-print-agent/odoo-print-agent run --config /etc/odoo-print-agent/config.json
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
