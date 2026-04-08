@@ -36,18 +36,11 @@ func DefaultConfig() *Config {
 	return &Config{
 		OdooURL:             "",
 		APIKey:              "",
-		PollIntervalSeconds: 3,
+		PollIntervalSeconds: 5,
 		LeaseSeconds:        30,
 		Limit:               20,
 		SpoolDir:            "spool",
-		Printers: []PrinterConfig{
-			{
-				AgentIdentifier: "test_printer_1",
-				Name:            "Test Printer",
-				PrinterType:     "receipt",
-				Code:            "TEST1",
-			},
-		},
+		Printers:            nil,
 	}
 }
 

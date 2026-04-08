@@ -15,16 +15,55 @@ Current architecture (today):
 
 ## Install (End Users)
 
-Recommended: use the packaged installers for your OS (from releases).
+Recommended (internal): download the binary for your OS and run the interactive installer command. It launches a local setup UI, writes `config.json`, and installs an auto-start service.
 
-If you are building/distributing yourself, this repo includes installer templates:
+### Internal install (binary + UI)
+
+macOS (per-user, starts on login):
+
+```bash
+./odoo-print-agent install
+```
+
+macOS (system-wide, starts on boot):
+
+```bash
+sudo ./odoo-print-agent install
+```
+
+Linux (systemd, starts on boot):
+
+```bash
+sudo ./odoo-print-agent install
+```
+
+Windows (run from an elevated terminal, starts as a Windows service):
+
+```powershell
+odoo-print-agent.exe install
+```
+
+The installer prints a `Setup UI: http://127.0.0.1:PORT/` URL and opens it in your browser (unless `--no-open` is used). Save Odoo URL, API key, and printers in the UI; then the agent service is started and set to auto-start.
+
+Default install locations:
+- macOS (per-user): `~/Library/Application Support/OdooPrintAgent/config.json`
+- macOS (system): `/Library/Application Support/OdooPrintAgent/config.json`
+- Linux: `/etc/odoo-print-agent/config.json`
+- Windows: `C:\ProgramData\OdooPrintAgent\config.json`
+
+Logs:
+- macOS: `~/Library/Logs/OdooPrintAgent/agent.jsonl` or `/Library/Logs/OdooPrintAgent/agent.jsonl`
+- Linux: `/var/log/odoo-print-agent/agent.jsonl`
+- Windows: `C:\ProgramData\OdooPrintAgent\logs\agent.jsonl`
+
+### Packaged installers (optional)
+
+If you are building/distributing yourself, this repo also includes installer templates:
 
 ### Windows
 
 - Inno Setup script: `installer/windows/print-agent.iss`
-- Installs as either:
-  - Windows Service (NSSM), recommended
-  - or “Run on login” (registry entry)
+- Can install as a Windows Service or “Run on login” depending on your build settings
 - Installer config path: `C:\ProgramData\OdooPrintAgent\config.json`
 
 ### macOS
@@ -33,7 +72,7 @@ If you are building/distributing yourself, this repo includes installer template
 - Installs:
   - Binary: `/Applications/OdooPrintAgent/odoo-print-agent`
   - Config: `/Library/Application Support/OdooPrintAgent/config.json`
-  - Logs: `/Library/Logs/OdooPrintAgent/agent.log`
+  - Logs: `/Library/Logs/OdooPrintAgent/agent.jsonl`
   - LaunchDaemon (auto-start on boot): `/Library/LaunchDaemons/com.odoo.printagent.plist`
 
 ### Linux
@@ -69,6 +108,10 @@ Or use the local setup UI (writes `config.json` for you):
 ```bash
 go run . ui
 ```
+
+Notes:
+- `ui` starts a local web server and keeps running while you use the browser UI. Stop it with Ctrl+C when you are done saving the config.
+- `run` is the actual agent loop and should keep running (as a service in production).
 
 ## Doctor
 

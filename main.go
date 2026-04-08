@@ -44,6 +44,8 @@ func main() {
 		setupCmd(args)
 	case "test-print":
 		testPrintCmd(args)
+	case "install":
+		installCmd(args)
 	case "version":
 		fmt.Printf("odoo-print-agent %s\n", versionString())
 	default:
