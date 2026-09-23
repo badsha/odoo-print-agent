@@ -30,8 +30,12 @@ func (b *RoutingBackend) Print(ctx context.Context, printer PrinterConfig, job J
 		return b.raw.Print(ctx, printer, job, payload)
 	}
 	if strings.TrimSpace(printer.OSPrinterName) != "" {
-		if b.winPDF != nil && strings.ToLower(strings.TrimSpace(job.JobType)) == "pdf" {
-			return b.winPDF.Print(ctx, printer, job, payload)
+		// Windows: Sumatra handles PDF and POS receipt images (JPEG/PNG sent as raw).
+		if b.winPDF != nil {
+			jt := strings.ToLower(strings.TrimSpace(job.JobType))
+			if jt == "pdf" || looksLikePDF(payload) || looksLikeJPEG(payload) || looksLikePNG(payload) {
+				return b.winPDF.Print(ctx, printer, job, payload)
+			}
 		}
 		return b.cups.Print(ctx, printer, job, payload)
 	}

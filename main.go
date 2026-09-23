@@ -89,7 +89,7 @@ func runCmd(args []string) {
 	defer cancel()
 	registerSignals(cancel)
 
-	client := NewAPIClient(cfg.OdooURL, cfg.APIKey)
+	client := NewAPIClientWithDB(cfg.OdooURL, cfg.APIKey, cfg.Database)
 	backend := NewRoutingBackend(cfg)
 	cleanupStartup(cfg)
 
@@ -125,6 +125,8 @@ func configureCmd(args []string) {
 	configPath := fs.String("config", "", "Path to config.json (defaults to ./config.json)")
 	odooURL := fs.String("odoo-url", "", "Odoo base URL")
 	odooURLAlt := fs.String("odoo_url", "", "Odoo base URL")
+	database := fs.String("database", "", "Odoo database name (required when multiple DBs exist)")
+	databaseAlt := fs.String("db", "", "Odoo database name (alias of --database)")
 	apiKey := fs.String("api-key", "", "Agent API key")
 	skipValidate := fs.Bool("skip-validate", false, "Skip connectivity validation")
 	_ = fs.Parse(args)
@@ -140,6 +142,11 @@ func configureCmd(args []string) {
 	} else if strings.TrimSpace(*odooURLAlt) != "" {
 		cfg.OdooURL = strings.TrimSpace(*odooURLAlt)
 	}
+	if strings.TrimSpace(*database) != "" {
+		cfg.Database = strings.TrimSpace(*database)
+	} else if strings.TrimSpace(*databaseAlt) != "" {
+		cfg.Database = strings.TrimSpace(*databaseAlt)
+	}
 	if strings.TrimSpace(*apiKey) != "" {
 		cfg.APIKey = strings.TrimSpace(*apiKey)
 	}
@@ -153,7 +160,7 @@ func configureCmd(args []string) {
 	if !*skipValidate {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		client := NewAPIClient(cfg.OdooURL, cfg.APIKey)
+		client := NewAPIClientWithDB(cfg.OdooURL, cfg.APIKey, cfg.Database)
 		if _, err := client.GetJobs(ctx, 5, 1); err != nil {
 			logFatalf("validate failed: %v", err)
 		}
