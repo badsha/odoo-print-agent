@@ -4,3 +4,8 @@ spool/
 *.jsonl
 .DS_Store
 .idea/
+
+config.json
+*.exe
+spool/
+

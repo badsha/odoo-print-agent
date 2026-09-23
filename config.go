@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 type Config struct {
 	OdooURL             string          `json:"odoo_url"`
+	Database            string          `json:"database"`
 	APIKey              string          `json:"api_key"`
 	PollIntervalSeconds int             `json:"poll_interval_seconds"`
 	LeaseSeconds        int             `json:"lease_seconds"`
@@ -69,10 +71,19 @@ func LoadConfig(path string) (*Config, error) {
 
 func (c *Config) Normalize(baseDir string) error {
 	c.OdooURL = strings.TrimSpace(c.OdooURL)
+	c.Database = strings.TrimSpace(c.Database)
 	c.APIKey = strings.TrimSpace(c.APIKey)
 	c.SumatraPDFPath = strings.TrimSpace(c.SumatraPDFPath)
 	c.LogFile = strings.TrimSpace(c.LogFile)
 	c.LogLevel = strings.TrimSpace(c.LogLevel)
+	// Allow ?db=name in odoo_url when database field is empty.
+	if c.Database == "" && c.OdooURL != "" {
+		if u, err := parseURLForDB(c.OdooURL); err == nil {
+			if db := strings.TrimSpace(u.Query().Get("db")); db != "" {
+				c.Database = db
+			}
+		}
+	}
 	if c.PollIntervalSeconds <= 0 {
 		c.PollIntervalSeconds = 3
 	}
@@ -128,4 +139,8 @@ func (c *Config) Save(path string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func parseURLForDB(raw string) (*url.URL, error) {
+	return url.Parse(strings.TrimSpace(raw))
 }

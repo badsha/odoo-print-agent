@@ -128,6 +128,7 @@ func uiCmd(args []string) {
 		}
 
 		cfg.OdooURL = strings.TrimSpace(r.FormValue("odoo_url"))
+		cfg.Database = strings.TrimSpace(r.FormValue("database"))
 		cfg.APIKey = strings.TrimSpace(r.FormValue("api_key"))
 		cfg.SpoolDir = strings.TrimSpace(r.FormValue("spool_dir"))
 		cfg.PollIntervalSeconds = parseInt(r.FormValue("poll_interval_seconds"), cfg.PollIntervalSeconds)
@@ -204,12 +205,17 @@ func uiDoctorReport(ctx context.Context, cfg *Config, configPath string, timeout
 	lines := []string{
 		"config: " + configPath,
 		"odoo_url: " + strings.TrimSpace(cfg.OdooURL),
+		"database: " + strings.TrimSpace(cfg.Database),
 	}
 
 	baseURL, err := url.Parse(strings.TrimRight(strings.TrimSpace(cfg.OdooURL), "/"))
 	if err != nil || strings.TrimSpace(baseURL.Scheme) == "" || strings.TrimSpace(baseURL.Host) == "" {
 		lines = append(lines, fmt.Sprintf("odoo: fail: invalid odoo_url %q", cfg.OdooURL))
 		return lines
+	}
+	database := strings.TrimSpace(cfg.Database)
+	if database == "" {
+		database = strings.TrimSpace(baseURL.Query().Get("db"))
 	}
 
 	httpClient := &http.Client{Timeout: timeout}
@@ -220,18 +226,21 @@ func uiDoctorReport(ctx context.Context, cfg *Config, configPath string, timeout
 	}
 	lines = append(lines, "odoo: ok")
 
-	apiInstalled, err := doctorCheckPrintAPIInstalled(ctx, httpClient, baseURL)
+	apiInstalled, err := doctorCheckPrintAPIInstalled(ctx, httpClient, baseURL, database)
 	if err != nil {
 		lines = append(lines, "api: fail: "+err.Error())
 		return lines
 	}
 	if !apiInstalled {
 		lines = append(lines, "api: missing: install the Odoo module ll_print_platform")
+		if database == "" {
+			lines = append(lines, "hint: set database in config.json (e.g. distribution)")
+		}
 		return lines
 	}
 	lines = append(lines, "api: ok")
 
-	if err := doctorCheckAPIKey(ctx, httpClient, baseURL, strings.TrimSpace(cfg.APIKey)); err != nil {
+	if err := doctorCheckAPIKey(ctx, httpClient, baseURL, database, strings.TrimSpace(cfg.APIKey)); err != nil {
 		lines = append(lines, "api_key: fail: "+err.Error())
 		lines = append(lines, "hint: In Odoo: Printing → Configuration → Printing Setup → Generate / Load API Key (ensure agent is active)")
 		return lines
@@ -374,6 +383,10 @@ const uiHTML = `<!doctype html>
         <div>
           <label>Odoo URL</label>
           <input type="text" name="odoo_url" value="{{.Config.OdooURL}}" placeholder="https://your-odoo.example.com" />
+        </div>
+        <div>
+          <label>Database</label>
+          <input type="text" name="database" value="{{.Config.Database}}" placeholder="distribution" />
         </div>
         <div>
           <label>API Key</label>

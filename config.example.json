@@ -1,0 +1,13 @@
+﻿{
+  "odoo_url": "http://127.0.0.1:8069",
+  "database": "YOUR_DATABASE_NAME",
+  "api_key": "PASTE_FROM_ODOO_PRINTING_SETUP",
+  "poll_interval_seconds": 5,
+  "lease_seconds": 30,
+  "limit": 20,
+  "spool_dir": "spool",
+  "sumatra_pdf_path": "",
+  "log_file": "",
+  "log_level": "info",
+  "printers": []
+}

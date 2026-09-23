@@ -1,5 +1,50 @@
 # odoo-print-agent
 
+Local print agent for **Print Master** / LL Print Platform (Odoo).
+
+- Odoo module: https://github.com/badsha/ll_print_platform  
+- App Store: https://apps.odoo.com/apps/modules/19.0/ll_print_platform/
+
+## Choose your setup
+
+### Option A — Quick setup (Windows)
+
+1. Download the latest **Release Asset** (EXE) from:  
+   https://github.com/badsha/odoo-print-agent/releases/latest  
+2. From Printing Setup in Odoo, copy your API key.
+3. Run:
+
+```powershell
+.\odoo-print-agent.exe configure --odoo-url http://YOUR-ODOO:8069 --database YOUR_DB --api-key YOUR_KEY
+.\odoo-print-agent.exe doctor
+.\odoo-print-agent.exe run
+```
+
+Optional service install (elevated): `.\odoo-print-agent.exe install`
+
+On Windows, install [SumatraPDF](https://www.sumatrapdfreader.org/) (or set `sumatra_pdf_path`) for PDF and POS receipt image printing.
+
+### Option B — Manual / build from source
+
+1. Install [Go](https://go.dev/dl/)
+2. Clone this repo
+3. Build and configure:
+
+```bash
+go build -o odoo-print-agent.exe .
+# or: go run .
+
+go run . configure --odoo-url http://YOUR-ODOO:8069 --database YOUR_DB --api-key YOUR_KEY
+go run . doctor
+go run . run
+```
+
+If Odoo has **multiple databases**, always set `--database` / `"database"` in config.
+
+See `config.example.json` for a template (do not commit real API keys).
+
+---
+
 ## Overview
 
 This is the local agent for **LL Print Platform** (Odoo addon). It runs on a machine that has access to printers and connects to Odoo using an API key.
@@ -10,6 +55,7 @@ Current architecture (today):
 - Marks jobs ack/done/fail (`/api/print/job/<id>/*`)
 - Prints jobs locally using either:
   - OS printer queue (macOS/Linux via CUPS `lp`)
+  - Windows: PDF + POS JPEG/PNG via SumatraPDF (`os_printer_name`)
   - Raw TCP printing (LAN printers on port 9100, for raw/ESC-POS jobs)
   - Spool-to-file fallback (writes payloads to disk)
 

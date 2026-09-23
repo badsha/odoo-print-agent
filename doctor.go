@@ -33,6 +33,7 @@ func doctorCmd(args []string) {
 
 	fmt.Println("config:", absPath)
 	fmt.Println("odoo_url:", strings.TrimSpace(cfg.OdooURL))
+	fmt.Println("database:", strings.TrimSpace(cfg.Database))
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -40,6 +41,10 @@ func doctorCmd(args []string) {
 	baseURL, err := url.Parse(strings.TrimRight(strings.TrimSpace(cfg.OdooURL), "/"))
 	if err != nil || strings.TrimSpace(baseURL.Scheme) == "" || strings.TrimSpace(baseURL.Host) == "" {
 		logFatalf("invalid odoo_url: %q", cfg.OdooURL)
+	}
+	database := strings.TrimSpace(cfg.Database)
+	if database == "" {
+		database = strings.TrimSpace(baseURL.Query().Get("db"))
 	}
 
 	httpClient := &http.Client{Timeout: *timeout}
@@ -50,18 +55,21 @@ func doctorCmd(args []string) {
 	}
 	fmt.Println("odoo:", "ok")
 
-	apiInstalled, err := doctorCheckPrintAPIInstalled(ctx, httpClient, baseURL)
+	apiInstalled, err := doctorCheckPrintAPIInstalled(ctx, httpClient, baseURL, database)
 	if err != nil {
 		fmt.Println("api:", "fail:", err.Error())
 		os.Exit(1)
 	}
 	if !apiInstalled {
 		fmt.Println("api:", "missing: install the Odoo module ll_print_platform")
+		if database == "" {
+			fmt.Println("hint:", "Multiple Odoo databases detected. Set \"database\": \"distribution\" in config.json (or --database)")
+		}
 		os.Exit(1)
 	}
 	fmt.Println("api:", "ok")
 
-	if err := doctorCheckAPIKey(ctx, httpClient, baseURL, strings.TrimSpace(cfg.APIKey)); err != nil {
+	if err := doctorCheckAPIKey(ctx, httpClient, baseURL, database, strings.TrimSpace(cfg.APIKey)); err != nil {
 		fmt.Println("api_key:", "fail:", err.Error())
 		fmt.Println("hint:", "In Odoo: Printing → Configuration → Printing Setup → Generate / Load API Key (ensure agent is active)")
 		os.Exit(1)
@@ -90,12 +98,15 @@ func doctorCheckOdooReachable(ctx context.Context, c *http.Client, base *url.URL
 	return nil
 }
 
-func doctorCheckPrintAPIInstalled(ctx context.Context, c *http.Client, base *url.URL) (bool, error) {
+func doctorCheckPrintAPIInstalled(ctx context.Context, c *http.Client, base *url.URL, database string) (bool, error) {
 	u := *base
 	u.Path = "/api/print/jobs"
 	q := make(url.Values)
 	q.Set("limit", "1")
 	q.Set("lease_seconds", "1")
+	if database != "" {
+		q.Set("db", database)
+	}
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -103,6 +114,9 @@ func doctorCheckPrintAPIInstalled(ctx context.Context, c *http.Client, base *url
 		return false, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if database != "" {
+		req.Header.Set("X-Odoo-Database", database)
+	}
 	res, err := c.Do(req)
 	if err != nil {
 		return false, err
@@ -122,12 +136,17 @@ func doctorCheckPrintAPIInstalled(ctx context.Context, c *http.Client, base *url
 	return false, fmt.Errorf("unexpected http %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
 }
 
-func doctorCheckAPIKey(ctx context.Context, c *http.Client, base *url.URL, apiKey string) error {
+func doctorCheckAPIKey(ctx context.Context, c *http.Client, base *url.URL, database string, apiKey string) error {
 	if apiKey == "" {
 		return fmt.Errorf("missing api_key in config")
 	}
 	u := *base
 	u.Path = "/api/print/printers/sync"
+	if database != "" {
+		q := make(url.Values)
+		q.Set("db", database)
+		u.RawQuery = q.Encode()
+	}
 
 	body := map[string]any{"printers": []any{}}
 	b, err := json.Marshal(body)
@@ -142,6 +161,9 @@ func doctorCheckAPIKey(ctx context.Context, c *http.Client, base *url.URL, apiKe
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	if database != "" {
+		req.Header.Set("X-Odoo-Database", database)
+	}
 
 	res, err := c.Do(req)
 	if err != nil {
@@ -151,7 +173,7 @@ func doctorCheckAPIKey(ctx context.Context, c *http.Client, base *url.URL, apiKe
 
 	respBytes, _ := io.ReadAll(io.LimitReader(res.Body, 32<<10))
 	if res.StatusCode == 404 && looksLikeHTML(respBytes) {
-		return fmt.Errorf("print API not found (ll_print_platform not installed)")
+		return fmt.Errorf("print API not found (ll_print_platform not installed or wrong database)")
 	}
 	if res.StatusCode == 401 {
 		return fmt.Errorf("unauthorized (api key not recognized by Odoo)")

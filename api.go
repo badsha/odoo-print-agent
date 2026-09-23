@@ -16,12 +16,17 @@ import (
 )
 
 type APIClient struct {
-	baseURL *url.URL
-	apiKey  string
-	http    *http.Client
+	baseURL  *url.URL
+	apiKey   string
+	database string
+	http     *http.Client
 }
 
 func NewAPIClient(odooURL, apiKey string) *APIClient {
+	return NewAPIClientWithDB(odooURL, apiKey, "")
+}
+
+func NewAPIClientWithDB(odooURL, apiKey, database string) *APIClient {
 	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(odooURL), "/"))
 	if err != nil {
 		panic(err)
@@ -34,9 +39,18 @@ func NewAPIClient(odooURL, apiKey string) *APIClient {
 			u.Host = net.JoinHostPort("127.0.0.1", port)
 		}
 	}
+	db := strings.TrimSpace(database)
+	if db == "" {
+		db = strings.TrimSpace(u.Query().Get("db"))
+	}
+	// Keep path/host clean; db is sent via header + query on each request.
+	q := u.Query()
+	q.Del("db")
+	u.RawQuery = q.Encode()
 	return &APIClient{
-		baseURL: u,
-		apiKey:  strings.TrimSpace(apiKey),
+		baseURL:  u,
+		apiKey:   strings.TrimSpace(apiKey),
+		database: db,
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -122,8 +136,23 @@ func (c *APIClient) FailJob(ctx context.Context, jobID int64, leaseUUID string, 
 
 func (c *APIClient) doJSON(ctx context.Context, method string, endpoint string, query url.Values, reqBody any, out any) error {
 	u := *c.baseURL
-	u.Path = path.Join(u.Path, endpoint)
-	u.RawQuery = query.Encode()
+	u.Path = path.Join(strings.TrimSuffix(u.Path, "/"), endpoint)
+
+	merged := make(url.Values)
+	for k, vals := range u.Query() {
+		for _, v := range vals {
+			merged.Add(k, v)
+		}
+	}
+	for k, vals := range query {
+		for _, v := range vals {
+			merged.Set(k, v)
+		}
+	}
+	if c.database != "" {
+		merged.Set("db", c.database)
+	}
+	u.RawQuery = merged.Encode()
 
 	var body io.Reader
 	if reqBody != nil {
@@ -140,6 +169,9 @@ func (c *APIClient) doJSON(ctx context.Context, method string, endpoint string, 
 	}
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	if c.database != "" {
+		req.Header.Set("X-Odoo-Database", c.database)
 	}
 	if reqBody != nil {
 		req.Header.Set("Content-Type", "application/json")
