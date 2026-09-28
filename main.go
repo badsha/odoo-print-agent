@@ -23,8 +23,20 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 
 	args := os.Args[1:]
+	// Double-click / no args: open Setup UI when not configured yet (merchant-friendly).
+	if len(args) == 0 {
+		if needsFirstRunSetup("") {
+			fmt.Println("First-time setup: opening Setup UI in your browser…")
+			fmt.Println("Tip: shop users should prefer OdooPrintAgentSetup.exe from GitHub Releases.")
+			uiCmd([]string{})
+			return
+		}
+		runCmd(args)
+		return
+	}
+
 	cmd := "run"
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+	if !strings.HasPrefix(args[0], "-") {
 		cmd = args[0]
 		args = args[1:]
 	}
@@ -52,6 +64,21 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		os.Exit(2)
 	}
+}
+
+func needsFirstRunSetup(configPath string) bool {
+	absPath := resolveConfigPath(configPath)
+	cfg, err := LoadConfig(absPath)
+	if err != nil {
+		return true
+	}
+	if strings.TrimSpace(cfg.OdooURL) == "" || strings.TrimSpace(cfg.APIKey) == "" {
+		return true
+	}
+	if len(cfg.Printers) == 0 {
+		return true
+	}
+	return false
 }
 
 func versionString() string {
@@ -169,6 +196,11 @@ func configureCmd(args []string) {
 		logFatalf("save config: %v", err)
 	}
 	fmt.Printf("saved %s\n", absPath)
+	if len(cfg.Printers) == 0 {
+		fmt.Println("warn: no printers configured yet.")
+		fmt.Println("Shop users: run OdooPrintAgentSetup.exe, or: odoo-print-agent.exe ui  (tick printers → Save)")
+		fmt.Println("Developers: edit config.json printers[], or: odoo-print-agent.exe setup")
+	}
 }
 
 func resolveConfigPath(path string) string {

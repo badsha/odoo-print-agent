@@ -7,39 +7,46 @@ Local print agent for **Print Master** / LL Print Platform (Odoo).
 
 ## Choose your setup
 
-### Option A — Quick setup (Windows)
+### Option A — Shop / Windows one-click (recommended)
 
-1. Download the latest **Release Asset** (EXE) from:  
+For cashiers and non-developers. **No PowerShell. No editing files.**
+
+1. In Odoo: **Printing → Configuration → Printing Setup** → Generate / Load API Key → copy it.
+2. Download **`OdooPrintAgentSetup.exe`** from:  
    https://github.com/badsha/odoo-print-agent/releases/latest  
-2. From Printing Setup in Odoo, copy your API key.
-3. Run:
+3. Double-click the Setup → Yes (admin) → paste Odoo address, database name (if multi-DB), API key → **tick printers** → Finish.
+4. Refresh Odoo → **Printing → Configuration → Printers**. Done.
+
+The Setup installs SumatraPDF for you and runs the agent as a Windows service so it keeps working after you close the wizard.
+
+To change printers later: Start Menu → **Odoo Print Agent Setup**.
+
+### Option B — Developers (CLI / source)
+
+Advanced only. Prefer Option A for shops.
 
 ```powershell
 .\odoo-print-agent.exe configure --odoo-url http://YOUR-ODOO:8069 --database YOUR_DB --api-key YOUR_KEY
+# then add printers via: .\odoo-print-agent.exe ui   OR edit config.json
 .\odoo-print-agent.exe doctor
 .\odoo-print-agent.exe run
 ```
 
-Optional service install (elevated): `.\odoo-print-agent.exe install`
-
-On Windows, install [SumatraPDF](https://www.sumatrapdfreader.org/) (or set `sumatra_pdf_path`) for PDF and POS receipt image printing.
-
-### Option B — Manual / build from source
-
-1. Install [Go](https://go.dev/dl/)
-2. Clone this repo
-3. Build and configure:
+Build from source:
 
 ```bash
 go build -o odoo-print-agent.exe .
-# or: go run .
-
 go run . configure --odoo-url http://YOUR-ODOO:8069 --database YOUR_DB --api-key YOUR_KEY
-go run . doctor
-go run . run
 ```
 
-If Odoo has **multiple databases**, always set `--database` / `"database"` in config.
+Windows one-click installer build (maintainers):
+
+```powershell
+.\installer\windows\build.ps1
+# → dist\windows\OdooPrintAgentSetup.exe
+```
+
+If Odoo has **multiple databases**, always set the database name in Setup / `--database`.
 
 See `config.example.json` for a template (do not commit real API keys).
 

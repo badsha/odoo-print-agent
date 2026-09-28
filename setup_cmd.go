@@ -16,8 +16,11 @@ func setupCmd(args []string) {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to config.json (defaults to ./config.json)")
 	odooURL := fs.String("odoo-url", "", "Odoo base URL")
+	database := fs.String("database", "", "Odoo database name (required when multiple DBs exist)")
+	databaseAlt := fs.String("db", "", "Odoo database name (alias of --database)")
 	apiKey := fs.String("api-key", "", "Agent API key")
-	osPrinterName := fs.String("os-printer-name", "", "Set os_printer_name for all configured printers")
+	osPrinterName := fs.String("os-printer-name", "", "Single OS printer name (creates/replaces printers list when empty)")
+	osPrinterNames := fs.String("os-printer-names", "", "Pipe-separated OS printer names (e.g. Printer A|Printer B)")
 	spoolDir := fs.String("spool-dir", "", "Override spool_dir")
 	sumatraPath := fs.String("sumatra-pdf-path", "", "Override sumatra_pdf_path (Windows PDF printing)")
 	logFile := fs.String("log-file", "", "Write JSON logs to this file (rotated)")
@@ -33,6 +36,7 @@ func setupCmd(args []string) {
 	}
 	initLogging(cfg)
 
+	nonInteractive := strings.TrimSpace(*odooURL) != "" && strings.TrimSpace(*apiKey) != ""
 	in := bufio.NewReader(os.Stdin)
 	fmt.Println("config:", absPath)
 
@@ -40,6 +44,13 @@ func setupCmd(args []string) {
 		cfg.OdooURL = strings.TrimSpace(*odooURL)
 	} else {
 		cfg.OdooURL = promptLine(in, "Odoo URL", cfg.OdooURL)
+	}
+	if strings.TrimSpace(*database) != "" {
+		cfg.Database = strings.TrimSpace(*database)
+	} else if strings.TrimSpace(*databaseAlt) != "" {
+		cfg.Database = strings.TrimSpace(*databaseAlt)
+	} else if !nonInteractive {
+		cfg.Database = promptLine(in, "Database (multi-DB Odoo)", cfg.Database)
 	}
 	if strings.TrimSpace(*apiKey) != "" {
 		cfg.APIKey = strings.TrimSpace(*apiKey)
@@ -66,7 +77,16 @@ func setupCmd(args []string) {
 		osPrinters = nil
 	}
 
-	if strings.TrimSpace(*osPrinterName) != "" {
+	selectedFromFlags := splitPrinterNames(*osPrinterNames)
+	if len(selectedFromFlags) == 0 && strings.TrimSpace(*osPrinterName) != "" {
+		selectedFromFlags = []string{strings.TrimSpace(*osPrinterName)}
+	}
+
+	if len(selectedFromFlags) > 0 {
+		cfg.Printers = buildPrinterConfigs(selectedFromFlags)
+	} else if nonInteractive {
+		// Installer/automation path: leave existing printers untouched when none passed.
+	} else if strings.TrimSpace(*osPrinterName) != "" {
 		for i := range cfg.Printers {
 			cfg.Printers[i].OSPrinterName = strings.TrimSpace(*osPrinterName)
 			cfg.Printers[i].NetworkHost = ""
@@ -86,6 +106,9 @@ func setupCmd(args []string) {
 		logFatalf("save config: %v", err)
 	}
 	fmt.Println("saved:", absPath)
+	if len(cfg.Printers) == 0 {
+		fmt.Println("warn: no printers configured — tick printers in Setup or pass --os-printer-names")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -100,12 +123,32 @@ func setupCmd(args []string) {
 		return
 	}
 
+	if nonInteractive {
+		return
+	}
+
 	yn := strings.ToLower(strings.TrimSpace(promptLine(in, "Run test print now? (y/N)", "")))
 	if yn == "y" || yn == "yes" {
 		if err := setupRunTestPrint(cfg, absPath, in); err != nil {
 			logFatalf("test print: %v", err)
 		}
 	}
+}
+
+func splitPrinterNames(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, "|")
+	var out []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func setupRunTestPrint(cfg *Config, configPath string, in *bufio.Reader) error {
